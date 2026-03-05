@@ -922,6 +922,22 @@
   // ──────────────────────────────────────────────
   // Parsing
   // ──────────────────────────────────────────────
+  // Internal Juniper interfaces that are not customer-facing
+  const INTERNAL_IFACE_PREFIXES = [
+    'lc-', 'pfe-', 'pfh-',   // line card / PFE internals
+    'cbp', 'demux',           // control plane / demux
+    'dsc', 'gre', 'ipip',     // discard / tunnels
+    'jsrv', 'lsi',            // junos service / label switched
+    'mtun', 'pimd', 'pime', 'pip',  // multicast / PIM
+    'rbeb', 'tap', 'vtep',    // internal fabric
+    'vme',                    // virtual management ethernet
+  ];
+
+  function isInternalIface(name) {
+    const base = name.split('.')[0].toLowerCase();
+    return INTERNAL_IFACE_PREFIXES.some(p => base.startsWith(p));
+  }
+
   function parseTerse(text) {
     const ifaces = {};
     const lines = text.split('\n');
@@ -929,6 +945,7 @@
       const m = line.match(/^(\S+)\s+(up|down)\s+(up|down)\s*(\S*)?/i);
       if (m) {
         const [, iface, admin, link, proto] = m;
+        if (isInternalIface(iface)) continue;
         ifaces[iface] = { iface, admin: admin.toLowerCase(), link: link.toLowerCase(), proto: proto || '' };
       }
     }
