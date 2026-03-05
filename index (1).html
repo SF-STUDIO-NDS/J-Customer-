@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Juniper Interface Log Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0d0d0d;
+    --bg-secondary: #111111;
+    --bg-card: #161616;
+    --bg-hover: #1c1c1c;
+    --border: #1f1f1f;
+    --border-active: #2a2a2a;
+    --juniper-green: #00ff88;
+    --juniper-dim: #00cc6a;
+    --accent-blue: #00ff88;
+    --accent-amber: #ff8c00;
+    --accent-red: #ff3333;
+    --accent-purple: #cc99ff;
+    --text-primary: #ccffcc;
+    --text-secondary: #4d8c4d;
+    --text-muted: #2a4a2a;
+    --up-color: #00ff88;
+    --down-color: #ff3333;
+    --admin-down: #ff8c00;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanlines overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,255,136,0.018) 3px, rgba(0,255,136,0.018) 4px);
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  /* Top Header */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 32px;
+    border-bottom: 1px solid #1a1a1a;
+    background: #0d0d0d;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #00ff88, #00cc55);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    box-shadow: 0 0 12px rgba(0,255,136,0.3);
+  }
+
+  .logo-text {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--text-primary);
+  }
+
+  .logo-sub {
+    font-size: 10px;
+    color: var(--juniper-green);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-top: 1px;
+  }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-muted);
+  }
+
+  .status-dot.active {
+    background: var(--juniper-green);
+    box-shadow: 0 0 8px var(--juniper-green);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* Main Layout */
+  .main {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    min-height: calc(100vh - 65px);
+  }
+
+  /* Sidebar */
+  .sidebar {
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--border);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* File Import Card */
+  .import-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    transition: border-color 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .import-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #00ff88, transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .import-card:hover::before { opacity: 1; }
+  .import-card:hover { border-color: #2a2a2a; }
+
+  .import-card.has-file {
+    border-color: #00ff88;
+    box-shadow: 0 0 10px rgba(0,255,136,0.08);
+  }
+
+  .import-card.has-file::before {
+    background: linear-gradient(90deg, transparent, #00ff88, transparent);
+    opacity: 1;
+  }
+
+  .card-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .step-badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+
+  .step-badge.active {
+    background: rgba(0,255,136,0.15);
+    color: #00ff88;
+    border: 1px solid rgba(0,255,136,0.4);
+    text-shadow: 0 0 6px rgba(0,255,136,0.5);
+  }
+
+  .card-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .card-cmd {
+    font-size: 9px;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-top: 1px;
+  }
+
+  .file-zone {
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+  }
+
+  .file-zone:hover {
+    border-color: #00ff88;
+    background: rgba(0,255,136,0.04);
+  }
+
+  .file-zone.drag-over {
+    border-color: #00ff88;
+    background: rgba(0,255,136,0.08);
+    box-shadow: inset 0 0 20px rgba(0,255,136,0.05);
+  }
+
+  .file-zone input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
+  .file-icon { font-size: 22px; margin-bottom: 6px; }
+
+  .file-hint {
+    font-size: 10px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .file-name {
+    font-size: 11px;
+    color: var(--juniper-green);
+    margin-top: 6px;
+    word-break: break-all;
+    display: none;
+  }
+
+  .file-clear {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--border);
+    border: none;
+    color: var(--text-secondary);
+    font-size: 10px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+  }
+
+  .file-clear:hover { background: var(--accent-red); color: white; }
+
+  /* Run Button */
+  .run-btn {
+    background: transparent;
+    border: 1px solid var(--juniper-green);
+    border-radius: 10px;
+    padding: 14px 20px;
+    color: var(--juniper-green);
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+    text-shadow: 0 0 8px rgba(0,255,136,0.6);
+    box-shadow: 0 0 10px rgba(0,255,136,0.1), inset 0 0 20px rgba(0,255,136,0.03);
+  }
+
+  .run-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: rgba(0,255,136,0.08);
+    transform: translateX(-100%);
+    transition: transform 0.4s;
+  }
+
+  .run-btn:hover::before { transform: translateX(100%); }
+  .run-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 20px rgba(0,255,136,0.3), inset 0 0 20px rgba(0,255,136,0.06);
+    background: rgba(0,255,136,0.05);
+  }
+  .run-btn:active { transform: translateY(0); }
+
+  .run-btn:disabled {
+    border-color: #2a2a2a;
+    color: #2a4a2a;
+    cursor: not-allowed;
+    box-shadow: none;
+    transform: none;
+    text-shadow: none;
+  }
+
+  .run-btn:disabled::before { display: none; }
+
+  .run-icon { font-size: 18px; }
+
+  /* Status Bar */
+  .status-bar {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    min-height: 38px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .status-bar.running { color: #00ff88; border-color: rgba(0,255,136,0.4); }
+  .status-bar.success { color: #00ff88; border-color: rgba(0,255,136,0.4); text-shadow: 0 0 6px rgba(0,255,136,0.3); }
+  .status-bar.error { color: #ff3333; border-color: rgba(255,51,51,0.4); }
+
+  /* Protocol Legend */
+  .legend-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* Content Area */
+  .content {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Stats Row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stat-card {
+    background: var(--bg-secondary);
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: background 0.2s;
+  }
+
+  .stat-card:hover { background: var(--bg-hover); }
+
+  .stat-value {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .stat-label {
+    font-size: 9px;
+    color: var(--text-secondary);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .stat-up { color: #00ff88; text-shadow: 0 0 10px rgba(0,255,136,0.4); }
+  .stat-down { color: #ff3333; text-shadow: 0 0 10px rgba(255,51,51,0.3); }
+  .stat-amber { color: #ff8c00; text-shadow: 0 0 10px rgba(255,140,0,0.3); }
+  .stat-blue { color: #00ff88; }
+  .stat-purple { color: #cc99ff; }
+  .stat-default { color: #ccffcc; }
+
+  /* Table Area */
+  .table-area {
+    flex: 1;
+    overflow: auto;
+    padding: 20px 24px;
+  }
+
+  .table-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    flex: 1;
+  }
+
+  .search-box {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 12px;
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    width: 220px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .search-box:focus { border-color: #00ff88; box-shadow: 0 0 8px rgba(0,255,136,0.15); }
+  .search-box::placeholder { color: var(--text-muted); }
+
+  .filter-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .filter-btn:hover { border-color: #00ff88; color: #00ff88; }
+
+  .filter-btn.active {
+    border-color: #00ff88;
+    color: #00ff88;
+    background: rgba(0,255,136,0.08);
+    text-shadow: 0 0 6px rgba(0,255,136,0.4);
+  }
+
+  .export-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 8px 14px;
+    color: #00ff88;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .export-btn:hover { border-color: #00ff88; background: rgba(0,255,136,0.06); }
+
+  /* Table */
+  .result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .result-table thead th {
+    background: #0d0d0d;
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #4d8c4d;
+    border-bottom: 1px solid #1f1f1f;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    position: sticky;
+    top: 0;
+  }
+
+  .result-table thead th:hover { color: #00ff88; }
+
+  .result-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+    animation: fadeRow 0.3s ease both;
+  }
+
+  @keyframes fadeRow {
+    from { opacity: 0; transform: translateX(-6px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .result-table tbody tr:hover { background: var(--bg-hover); }
+
+  .result-table td {
+    padding: 10px 14px;
+    color: var(--text-primary);
+    font-size: 12px;
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Status badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .badge-up { background: rgba(0,255,136,0.1); color: #00ff88; border: 1px solid rgba(0,255,136,0.3); text-shadow: 0 0 6px rgba(0,255,136,0.5); }
+  .badge-down { background: rgba(255,51,51,0.1); color: #ff3333; border: 1px solid rgba(255,51,51,0.3); text-shadow: 0 0 6px rgba(255,51,51,0.4); }
+  .badge-admin-down { background: rgba(255,140,0,0.1); color: #ff8c00; border: 1px solid rgba(255,140,0,0.3); text-shadow: 0 0 6px rgba(255,140,0,0.4); }
+  .badge-deact { background: rgba(204,153,255,0.1); color: #cc99ff; border: 1px solid rgba(204,153,255,0.2); }
+
+  .badge::before {
+    content: '●';
+    font-size: 7px;
+  }
+
+  /* Protocol tag */
+  .proto-tag {
+    font-size: 10px;
+    color: #00ff88;
+    background: rgba(0,255,136,0.08);
+    border: 1px solid rgba(0,255,136,0.2);
+    border-radius: 3px;
+    padding: 1px 6px;
+  }
+
+  /* Empty state */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 80px 20px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .empty-icon {
+    font-size: 48px;
+    opacity: 0.3;
+  }
+
+  .empty-title {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .empty-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    max-width: 300px;
+    line-height: 1.6;
+  }
+
+  /* Loading animation */
+  .loading-bar {
+    height: 2px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-top: 6px;
+    display: none;
+  }
+
+  .loading-bar.active { display: block; }
+
+  .loading-bar::after {
+    content: '';
+    display: block;
+    height: 100%;
+    width: 30%;
+    background: linear-gradient(90deg, var(--juniper-green), var(--accent-blue));
+    animation: loading 1.2s ease infinite;
+  }
+
+  @keyframes loading {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(400%); }
+  }
+
+  /* Deactivated item indicator */
+  .deact-yes {
+    color: var(--accent-purple);
+    font-size: 11px;
+  }
+
+  .deact-no {
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg-primary); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-active); }
+
+  /* Tooltip */
+  [title] { cursor: help; }
+
+  /* Pagination */
+  .pagination {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 0 4px;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .page-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 4px 10px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    transition: all 0.15s;
+  }
+
+  .page-btn:hover, .page-btn.active {
+    border-color: #00ff88;
+    color: #00ff88;
+    text-shadow: 0 0 6px rgba(0,255,136,0.4);
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-logo">
+    <div class="logo-icon">🌲</div>
+    <div>
+      <div class="logo-text">JUNIPER ANALYZER</div>
+      <div class="logo-sub">Interface Log Analysis Tool</div>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="headerStatusText">No data loaded</span>
+  </div>
+</div>
+
+<!-- Main Layout -->
+<div class="main">
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+
+    <div class="sidebar-section">
+      <div class="section-label">Import Log Files</div>
+
+      <!-- Step 1 -->
+      <div class="import-card" id="card1">
+        <div class="card-step">
+          <div class="step-badge active" id="badge1">1</div>
+          <div>
+            <div class="card-title">terse.log</div>
+            <div class="card-cmd">show interfaces terse</div>
+          </div>
+        </div>
+        <div class="file-zone" id="zone1" ondragover="handleDragOver(event,'zone1')" ondragleave="handleDragLeave('zone1')" ondrop="handleDrop(event,1)">
+          <input type="file" accept=".log,.txt" onchange="handleFile(event,1)">
+          <div class="file-icon" id="fileIcon1">📄</div>
+          <div class="file-hint" id="fileHint1">Drop terse.log here<br>or click to browse</div>
+          <div class="file-name" id="fileName1"></div>
+          <button class="file-clear" id="clearBtn1" onclick="clearFile(event,1)">✕</button>
+        </div>
+        <div class="loading-bar" id="loadBar1"></div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="import-card" id="card2">
+        <div class="card-step">
+          <div class="step-badge" id="badge2">2</div>
+          <div>
+            <div class="card-title">config.log</div>
+            <div class="card-cmd">show configuration interfaces | display set</div>
+          </div>
+        </div>
+        <div class="file-zone" id="zone2" ondragover="handleDragOver(event,'zone2')" ondragleave="handleDragLeave('zone2')" ondrop="handleDrop(event,2)">
+          <input type="file" accept=".log,.txt" onchange="handleFile(event,2)">
+          <div class="file-icon" id="fileIcon2">📄</div>
+          <div class="file-hint" id="fileHint2">Drop config.log here<br>or click to browse</div>
+          <div class="file-name" id="fileName2"></div>
+          <button class="file-clear" id="clearBtn2" onclick="clearFile(event,2)">✕</button>
+        </div>
+        <div class="loading-bar" id="loadBar2"></div>
+      </div>
+    </div>
+
+    <!-- Run Button -->
+    <div class="sidebar-section">
+      <div class="section-label">Step 3 — Analyze</div>
+      <button class="run-btn" id="runBtn" onclick="runAnalysis()" disabled>
+        <span class="run-icon">▶</span>
+        RUN ANALYSIS
+      </button>
+      <div class="status-bar" id="statusBar">
+        <span>⚪</span>
+        <span id="statusText">Ready — import files to begin</span>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="sidebar-section">
+      <div class="section-label">Legend</div>
+      <div class="legend-grid">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--up-color)"></div> UP / UP</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--down-color)"></div> DOWN</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--admin-down)"></div> Admin-Down</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent-purple)"></div> Deactivated</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--accent-blue)"></div> inet / L3</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#a3e635)"></div> TCC / CCC</div>
+      </div>
+    </div>
+
+    <!-- Sample data hint -->
+    <div class="sidebar-section">
+      <div class="section-label">Quick Test</div>
+      <button class="filter-btn" style="width:100%;text-align:center" onclick="loadSampleData()">⚡ Load Sample Data</button>
+    </div>
+
+  </div>
+
+  <!-- Content Area -->
+  <div class="content">
+
+    <!-- Stats Row -->
+    <div class="stats-row" id="statsRow">
+      <div class="stat-card">
+        <div class="stat-value stat-default" id="statTotal">—</div>
+        <div class="stat-label">Total Interfaces</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-up" id="statUp">—</div>
+        <div class="stat-label">Link Up</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-down" id="statDown">—</div>
+        <div class="stat-label">Link Down</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-amber" id="statAdminDown">—</div>
+        <div class="stat-label">Admin Down</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-purple" id="statDeact">—</div>
+        <div class="stat-label">Deactivated</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-blue" id="statWithIP">—</div>
+        <div class="stat-label">Has IP</div>
+      </div>
+    </div>
+
+    <!-- Table Area -->
+    <div class="table-area">
+      <div class="table-toolbar">
+        <div class="toolbar-title">Interface Results</div>
+        <input type="text" class="search-box" placeholder="Search interface, IP, customer..." id="searchBox" oninput="applyFilters()">
+        <button class="filter-btn" id="filterAll" onclick="setFilter('all')" class="active">ALL</button>
+        <button class="filter-btn" id="filterUp" onclick="setFilter('up')">▲ UP</button>
+        <button class="filter-btn" id="filterDown" onclick="setFilter('down')">▼ DOWN</button>
+        <button class="filter-btn" id="filterDeact" onclick="setFilter('deact')">◈ DEACT</button>
+        <button class="export-btn" onclick="exportCSV()">⬇ Export CSV</button>
+      </div>
+
+      <div id="tableContainer">
+        <div class="empty-state">
+          <div class="empty-icon">🔌</div>
+          <div class="empty-title">No Data Loaded</div>
+          <div class="empty-sub">Import terse.log and config.log files from the sidebar, then click RUN ANALYSIS to view interface results.</div>
+        </div>
+      </div>
+
+      <div class="pagination" id="pagination" style="display:none"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let terseContent = null;
+  let configContent = null;
+  let allResults = [];
+  let filteredResults = [];
+  let currentFilter = 'all';
+  let currentPage = 1;
+  const PAGE_SIZE = 50;
+
+  // ──────────────────────────────────────────────
+  // File handling
+  // ──────────────────────────────────────────────
+  function handleFile(event, step) {
+    const file = event.target.files[0];
+    if (file) loadFileStep(file, step);
+  }
+
+  function handleDrop(event, step) {
+    event.preventDefault();
+    handleDragLeave('zone' + step);
+    const file = event.dataTransfer.files[0];
+    if (file) loadFileStep(file, step);
+  }
+
+  function handleDragOver(event, zoneId) {
+    event.preventDefault();
+    document.getElementById(zoneId).classList.add('drag-over');
+  }
+
+  function handleDragLeave(zoneId) {
+    document.getElementById(zoneId).classList.remove('drag-over');
+  }
+
+  function loadFileStep(file, step) {
+    const bar = document.getElementById('loadBar' + step);
+    bar.classList.add('active');
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      bar.classList.remove('active');
+      if (step === 1) terseContent = e.target.result;
+      else configContent = e.target.result;
+      updateFileUI(step, file.name);
+      checkReady();
+    };
+    reader.readAsText(file);
+  }
+
+  function updateFileUI(step, name) {
+    document.getElementById('fileIcon' + step).textContent = '✅';
+    document.getElementById('fileHint' + step).style.display = 'none';
+    const fn = document.getElementById('fileName' + step);
+    fn.textContent = name;
+    fn.style.display = 'block';
+    const cb = document.getElementById('clearBtn' + step);
+    cb.style.display = 'flex';
+    document.getElementById('card' + step).classList.add('has-file');
+    if (step === 2) document.getElementById('badge2').classList.add('active');
+  }
+
+  function clearFile(event, step) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (step === 1) terseContent = null;
+    else configContent = null;
+    document.getElementById('fileIcon' + step).textContent = '📄';
+    document.getElementById('fileHint' + step).style.display = 'block';
+    document.getElementById('fileName' + step).style.display = 'none';
+    document.getElementById('clearBtn' + step).style.display = 'none';
+    document.getElementById('card' + step).classList.remove('has-file');
+    checkReady();
+  }
+
+  function checkReady() {
+    const btn = document.getElementById('runBtn');
+    btn.disabled = !(terseContent && configContent);
+  }
+
+  // ──────────────────────────────────────────────
+  // Parsing
+  // ──────────────────────────────────────────────
+  function parseTerse(text) {
+    const ifaces = {};
+    const lines = text.split('\n');
+    for (const line of lines) {
+      const m = line.match(/^(\S+)\s+(up|down)\s+(up|down)\s*(\S*)?/i);
+      if (m) {
+        const [, iface, admin, link, proto] = m;
+        ifaces[iface] = { iface, admin: admin.toLowerCase(), link: link.toLowerCase(), proto: proto || '' };
+      }
+    }
+    return ifaces;
+  }
+
+  function parseConfig(text) {
+    const data = {};
+    const lines = text.split('\n');
+    for (const line of lines) {
+      // set interfaces ge-0/0/0 unit 0 description "Customer ABC - CID-12345"
+      const descM = line.match(/^set interfaces (\S+) unit (\d+) description (.+)/i);
+      if (descM) {
+        const key = `${descM[1]}.${descM[2]}`;
+        if (!data[key]) data[key] = {};
+        data[key].description = descM[3].replace(/['"]/g, '').trim();
+      }
+      // set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/30
+      const ipM = line.match(/^set interfaces (\S+) unit (\d+) family (\S+) address (\S+)/i);
+      if (ipM) {
+        const key = `${ipM[1]}.${ipM[2]}`;
+        if (!data[key]) data[key] = {};
+        data[key].protocol = ipM[3];
+        data[key].ipAddress = ipM[4];
+      }
+      // deactivate interfaces
+      const deactM = line.match(/^deactivate interfaces (\S+)/i);
+      if (deactM) {
+        const key = deactM[1];
+        if (!data[key]) data[key] = {};
+        data[key].deactivated = true;
+      }
+      // set interfaces ge-0/0/0 unit 0 family ccc / tcc
+      const famM = line.match(/^set interfaces (\S+) unit (\d+) family (ccc|tcc|inet6|mpls|bridge)/i);
+      if (famM) {
+        const key = `${famM[1]}.${famM[2]}`;
+        if (!data[key]) data[key] = {};
+        if (!data[key].protocol) data[key].protocol = famM[3].toUpperCase();
+      }
+    }
+    return data;
+  }
+
+  function extractCustomerAndCircuit(desc) {
+    if (!desc) return { customer: '', circuit: '' };
+    const custM = desc.match(/([A-Za-z0-9 _\-\.]+?)(?:\s*[-\/|]\s*|$)/);
+    const circM = desc.match(/(JPCC[-\s]?\d+[\w\-]*|CID[-\s]?\d+[\w\-]*)/i);
+    return {
+      customer: custM ? custM[1].trim() : '',
+      circuit: circM ? circM[1].trim() : ''
+    };
+  }
+
+  function mergeData(terse, config) {
+    const results = [];
+    for (const [iface, t] of Object.entries(terse)) {
+      const cfgKey = iface;
+      const cfg = config[cfgKey] || {};
+      const { customer, circuit } = extractCustomerAndCircuit(cfg.description);
+
+      // Determine status
+      let status;
+      if (t.admin === 'down') status = 'admin-down';
+      else if (t.link === 'up') status = 'up';
+      else status = 'down';
+
+      // Unit split
+      const parts = iface.split('.');
+      const unit = parts.length > 1 ? parts[parts.length - 1] : '0';
+      const baseIface = parts[0];
+
+      results.push({
+        status,
+        interface: baseIface,
+        admin: t.admin,
+        link: t.link,
+        unit,
+        protocol: cfg.protocol || t.proto || '',
+        ipAddress: cfg.ipAddress || '',
+        description: cfg.description || '',
+        customer,
+        circuit,
+        deactivated: cfg.deactivated ? 'Yes' : ''
+      });
+    }
+    return results;
+  }
+
+  // ──────────────────────────────────────────────
+  // Run Analysis
+  // ──────────────────────────────────────────────
+  function runAnalysis() {
+    setStatus('running', '⟳ Parsing terse.log...');
+    document.getElementById('statusDot').classList.add('active');
+
+    setTimeout(() => {
+      try {
+        let terse, config;
+
+        // Use real files or sample
+        if (terseContent && configContent) {
+          terse = parseTerse(terseContent);
+          config = parseConfig(configContent);
+        } else {
+          // Use sample
+          terse = parseTerse(SAMPLE_TERSE);
+          config = parseConfig(SAMPLE_CONFIG);
+        }
+
+        setStatus('running', '⟳ Merging with config...');
+
+        setTimeout(() => {
+          allResults = mergeData(terse, config);
+          currentFilter = 'all';
+          document.getElementById('filterAll').classList.add('active');
+          ['filterUp','filterDown','filterDeact'].forEach(id => document.getElementById(id).classList.remove('active'));
+          applyFilters();
+          updateStats();
+          setStatus('success', `✓ Analysis complete — ${allResults.length} interfaces found`);
+          document.getElementById('headerStatusText').textContent = `${allResults.length} interfaces loaded`;
+          document.getElementById('pagination').style.display = 'flex';
+        }, 400);
+
+      } catch (err) {
+        setStatus('error', '✕ Parse error: ' + err.message);
+      }
+    }, 300);
+  }
+
+  function setStatus(type, text) {
+    const bar = document.getElementById('statusBar');
+    const span = document.getElementById('statusText');
+    bar.className = 'status-bar ' + type;
+    span.textContent = text;
+  }
+
+  // ──────────────────────────────────────────────
+  // Stats
+  // ──────────────────────────────────────────────
+  function updateStats() {
+    const up = allResults.filter(r => r.status === 'up').length;
+    const down = allResults.filter(r => r.status === 'down').length;
+    const adminDown = allResults.filter(r => r.status === 'admin-down').length;
+    const deact = allResults.filter(r => r.deactivated === 'Yes').length;
+    const withIP = allResults.filter(r => r.ipAddress).length;
+
+    animateNum('statTotal', allResults.length);
+    animateNum('statUp', up);
+    animateNum('statDown', down);
+    animateNum('statAdminDown', adminDown);
+    animateNum('statDeact', deact);
+    animateNum('statWithIP', withIP);
+  }
+
+  function animateNum(id, target) {
+    const el = document.getElementById(id);
+    let current = 0;
+    const step = Math.ceil(target / 20);
+    const interval = setInterval(() => {
+      current = Math.min(current + step, target);
+      el.textContent = current;
+      if (current >= target) clearInterval(interval);
+    }, 30);
+  }
+
+  // ──────────────────────────────────────────────
+  // Filters
+  // ──────────────────────────────────────────────
+  function setFilter(f) {
+    currentFilter = f;
+    currentPage = 1;
+    ['filterAll','filterUp','filterDown','filterDeact'].forEach(id => document.getElementById(id).classList.remove('active'));
+    const map = { all:'filterAll', up:'filterUp', down:'filterDown', deact:'filterDeact' };
+    document.getElementById(map[f]).classList.add('active');
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const search = document.getElementById('searchBox').value.toLowerCase();
+    filteredResults = allResults.filter(r => {
+      if (currentFilter === 'up' && r.status !== 'up') return false;
+      if (currentFilter === 'down' && r.status !== 'down' && r.status !== 'admin-down') return false;
+      if (currentFilter === 'deact' && !r.deactivated) return false;
+      if (search) {
+        const haystack = [r.interface, r.ipAddress, r.description, r.customer, r.circuit, r.protocol].join(' ').toLowerCase();
+        if (!haystack.includes(search)) return false;
+      }
+      return true;
+    });
+    currentPage = 1;
+    renderTable();
+    renderPagination();
+  }
+
+  // ──────────────────────────────────────────────
+  // Render Table
+  // ──────────────────────────────────────────────
+  function renderTable() {
+    const container = document.getElementById('tableContainer');
+    if (filteredResults.length === 0) {
+      container.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <div class="empty-title">No Results</div>
+        <div class="empty-sub">No interfaces match your current filter or search.</div>
+      </div>`;
+      return;
+    }
+
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const pageData = filteredResults.slice(start, start + PAGE_SIZE);
+
+    const rows = pageData.map((r, i) => {
+      const statusBadge = {
+        'up': `<span class="badge badge-up">UP</span>`,
+        'down': `<span class="badge badge-down">DOWN</span>`,
+        'admin-down': `<span class="badge badge-admin-down">ADMIN-DN</span>`
+      }[r.status] || '';
+
+      const deactCell = r.deactivated
+        ? `<span class="deact-yes">◈ Yes</span>`
+        : `<span class="deact-no">—</span>`;
+
+      const protoCell = r.protocol
+        ? `<span class="proto-tag">${r.protocol}</span>`
+        : '<span class="deact-no">—</span>';
+
+      const delay = (i % PAGE_SIZE) * 18;
+
+      return `<tr style="animation-delay:${delay}ms">
+        <td>${statusBadge}</td>
+        <td title="${r.interface}">${r.interface}</td>
+        <td>${r.admin}</td>
+        <td>${r.link}</td>
+        <td>${r.unit}</td>
+        <td>${protoCell}</td>
+        <td>${r.ipAddress || '<span class="deact-no">—</span>'}</td>
+        <td title="${r.description}">${truncate(r.description, 30)}</td>
+        <td title="${r.customer}">${truncate(r.customer, 22)}</td>
+        <td>${r.circuit || '<span class="deact-no">—</span>'}</td>
+        <td>${deactCell}</td>
+      </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+      <table class="result-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Interface</th>
+            <th>Admin</th>
+            <th>Link</th>
+            <th>Unit</th>
+            <th>Protocol</th>
+            <th>IP Address</th>
+            <th>Description</th>
+            <th>Customer Name</th>
+            <th>Circuit ID</th>
+            <th>Deactivated</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="pagination" style="font-size:11px;color:var(--text-secondary);padding-top:12px">
+        Showing ${start+1}–${Math.min(start+PAGE_SIZE, filteredResults.length)} of ${filteredResults.length} results
+      </div>
+    `;
+  }
+
+  function renderPagination() {
+    const total = Math.ceil(filteredResults.length / PAGE_SIZE);
+    const pg = document.getElementById('pagination');
+    if (total <= 1) { pg.style.display = 'none'; return; }
+    pg.style.display = 'flex';
+    let html = `<span style="color:var(--text-secondary);font-size:11px">Page:</span>`;
+    for (let i = 1; i <= Math.min(total, 10); i++) {
+      html += `<button class="page-btn ${i===currentPage?'active':''}" onclick="goPage(${i})">${i}</button>`;
+    }
+    if (total > 10) html += `<span style="color:var(--text-muted)">... ${total} pages</span>`;
+    pg.innerHTML = html;
+  }
+
+  function goPage(p) {
+    currentPage = p;
+    renderTable();
+    renderPagination();
+  }
+
+  function truncate(str, max) {
+    if (!str) return '<span class="deact-no">—</span>';
+    return str.length > max ? str.substring(0, max) + '…' : str;
+  }
+
+  // ──────────────────────────────────────────────
+  // Export CSV
+  // ──────────────────────────────────────────────
+  function exportCSV() {
+    if (!filteredResults.length) return;
+    const headers = ['Status','Interface','Admin','Link','Unit','Protocol','IP Address','Description','Customer Name','Circuit ID (JPCC)','Deactivated Item'];
+    const rows = filteredResults.map(r => [
+      r.status, r.interface, r.admin, r.link, r.unit, r.protocol,
+      r.ipAddress, r.description, r.customer, r.circuit, r.deactivated
+    ].map(v => `"${(v||'').replace(/"/g,'""')}"`).join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'juniper_interfaces_' + new Date().toISOString().split('T')[0] + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ──────────────────────────────────────────────
+  // Sample Data
+  // ──────────────────────────────────────────────
+  const SAMPLE_TERSE = `
+ge-0/0/0                up    up
+ge-0/0/0.0              up    up       inet
+ge-0/0/1                up    down
+ge-0/0/1.0              up    down     inet
+ge-0/0/2                down  down
+ge-0/0/2.0              down  down
+ge-0/0/3                up    up
+ge-0/0/3.0              up    up       ccc
+ge-0/0/4                up    up
+ge-0/0/4.0              up    up       inet
+ge-0/0/5                down  down
+ge-0/0/5.0              down  down     inet
+xe-1/0/0                up    up
+xe-1/0/0.0              up    up       inet
+xe-1/0/1                up    down
+xe-1/0/2                up    up
+xe-1/0/2.0              up    up       tcc
+et-2/0/0                up    up
+et-2/0/0.0              up    up       inet
+lo0                     up    up
+lo0.0                   up    up       inet
+`;
+
+  const SAMPLE_CONFIG = `
+set interfaces ge-0/0/0 unit 0 description "TrueMove H - JPCC-2024-001"
+set interfaces ge-0/0/0 unit 0 family inet address 10.10.1.1/30
+set interfaces ge-0/0/1 unit 0 description "AIS Data Center - JPCC-2024-002"
+set interfaces ge-0/0/1 unit 0 family inet address 172.16.5.1/30
+set interfaces ge-0/0/2 unit 0 description "DTAC Corporate - JPCC-2024-003"
+set interfaces ge-0/0/2 unit 0 family inet address 192.168.10.1/29
+deactivate interfaces ge-0/0/2
+set interfaces ge-0/0/3 unit 0 description "NT Enterprise Solutions - CID-55023"
+set interfaces ge-0/0/3 unit 0 family ccc
+set interfaces ge-0/0/4 unit 0 description "SCB Bank Leased Line - JPCC-2024-010"
+set interfaces ge-0/0/4 unit 0 family inet address 10.20.30.1/30
+set interfaces ge-0/0/5 unit 0 description "KBTG Cloud Connect - JPCC-2024-011"
+set interfaces ge-0/0/5 unit 0 family inet address 10.20.31.1/30
+set interfaces xe-1/0/0 unit 0 description "True IDC - JPCC-2025-001"
+set interfaces xe-1/0/0 unit 0 family inet address 10.30.1.1/30
+set interfaces xe-1/0/2 unit 0 description "CAT Telecom - CID-77100"
+set interfaces xe-1/0/2 unit 0 family tcc
+set interfaces et-2/0/0 unit 0 description "TOT National Backbone - JPCC-2025-100"
+set interfaces et-2/0/0 unit 0 family inet address 10.40.0.1/30
+set interfaces lo0 unit 0 family inet address 203.150.0.1/32
+`;
+
+  function loadSampleData() {
+    terseContent = SAMPLE_TERSE;
+    configContent = SAMPLE_CONFIG;
+    updateFileUI(1, 'sample_terse.log');
+    updateFileUI(2, 'sample_config.log');
+    checkReady();
+    runAnalysis();
+  }
+</script>
+</body>
+</html>
