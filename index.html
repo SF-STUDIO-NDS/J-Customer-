@@ -954,12 +954,17 @@
         data[key].protocol = ipM[3];
         data[key].ipAddress = ipM[4];
       }
-      // deactivate interfaces
-      const deactM = line.match(/^deactivate interfaces (\S+)/i);
+      // deactivate interfaces ge-0/0/0  OR  deactivate interfaces ge-0/0/0 unit 0
+      const deactM = line.match(/^deactivate interfaces (\S+)(?:\s+unit\s+(\d+))?/i);
       if (deactM) {
-        const key = deactM[1];
-        if (!data[key]) data[key] = {};
-        data[key].deactivated = true;
+        const baseKey = deactM[1];
+        if (!data[baseKey]) data[baseKey] = {};
+        data[baseKey].deactivated = true;
+        if (deactM[2] !== undefined) {
+          const unitKey = `${baseKey}.${deactM[2]}`;
+          if (!data[unitKey]) data[unitKey] = {};
+          data[unitKey].deactivated = true;
+        }
       }
       // set interfaces ge-0/0/0 unit 0 family ccc / tcc
       const famM = line.match(/^set interfaces (\S+) unit (\d+) family (ccc|tcc|inet6|mpls|bridge)/i);
@@ -1015,6 +1020,34 @@
         deactivated: (cfg.deactivated || baseCfg.deactivated) ? 'Yes' : ''
       });
     }
+
+    // Add deactivated entries from config that never appeared in terse output
+    // (deactivated logical units are often absent from "show interfaces terse")
+    const terseKeySet = new Set(Object.keys(terse));
+    for (const [key, cfg] of Object.entries(config)) {
+      const parts = key.split('.');
+      if (parts.length < 2) continue;           // skip base-only keys
+      if (terseKeySet.has(key)) continue;        // already added via terse loop
+      const baseIface = parts[0];
+      const unit = parts[parts.length - 1];
+      const baseCfg2 = config[baseIface] || {};
+      if (!cfg.deactivated && !baseCfg2.deactivated) continue;
+      const { customer, circuit } = extractCustomerAndCircuit(cfg.description);
+      results.push({
+        status: 'admin-down',
+        interface: baseIface,
+        admin: 'down',
+        link: 'down',
+        unit,
+        protocol: cfg.protocol || '',
+        ipAddress: cfg.ipAddress || '',
+        description: cfg.description || '',
+        customer,
+        circuit,
+        deactivated: 'Yes'
+      });
+    }
+
     return results;
   }
 
