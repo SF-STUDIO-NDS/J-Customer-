@@ -985,8 +985,14 @@
   function mergeData(terse, config) {
     const results = [];
     for (const [iface, t] of Object.entries(terse)) {
+      // Unit split (compute first so baseIface is available for deactivated lookup)
+      const parts = iface.split('.');
+      const unit = parts.length > 1 ? parts[parts.length - 1] : '0';
+      const baseIface = parts[0];
+
       const cfgKey = iface;
       const cfg = config[cfgKey] || {};
+      const baseCfg = config[baseIface] || {};
       const { customer, circuit } = extractCustomerAndCircuit(cfg.description);
 
       // Determine status
@@ -994,11 +1000,6 @@
       if (t.admin === 'down') status = 'admin-down';
       else if (t.link === 'up') status = 'up';
       else status = 'down';
-
-      // Unit split
-      const parts = iface.split('.');
-      const unit = parts.length > 1 ? parts[parts.length - 1] : '0';
-      const baseIface = parts[0];
 
       results.push({
         status,
@@ -1011,7 +1012,7 @@
         description: cfg.description || '',
         customer,
         circuit,
-        deactivated: cfg.deactivated ? 'Yes' : ''
+        deactivated: (cfg.deactivated || baseCfg.deactivated) ? 'Yes' : ''
       });
     }
     return results;
