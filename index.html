@@ -710,50 +710,31 @@
   <div class="sidebar">
 
     <div class="sidebar-section">
-      <div class="section-label">Import Log Files</div>
+      <div class="section-label">Import Log File</div>
 
-      <!-- Step 1 -->
+      <!-- Step 1 — Combined log -->
       <div class="import-card" id="card1">
         <div class="card-step">
           <div class="step-badge active" id="badge1">1</div>
           <div>
-            <div class="card-title">terse.log</div>
-            <div class="card-cmd">show interfaces terse</div>
+            <div class="card-title">combined.log</div>
+            <div class="card-cmd">terse + config | display set</div>
           </div>
         </div>
-        <div class="file-zone" id="zone1" ondragover="handleDragOver(event,'zone1')" ondragleave="handleDragLeave('zone1')" ondrop="handleDrop(event,1)">
-          <input type="file" accept=".log,.txt" onchange="handleFile(event,1)">
+        <div class="file-zone" id="zone1" ondragover="handleDragOver(event,'zone1')" ondragleave="handleDragLeave('zone1')" ondrop="handleDrop(event)">
+          <input type="file" accept=".log,.txt" onchange="handleFile(event)">
           <div class="file-icon" id="fileIcon1">📄</div>
-          <div class="file-hint" id="fileHint1">Drop terse.log here<br>or click to browse</div>
+          <div class="file-hint" id="fileHint1">Drop combined log here<br>or click to browse</div>
           <div class="file-name" id="fileName1"></div>
-          <button class="file-clear" id="clearBtn1" onclick="clearFile(event,1)">✕</button>
+          <button class="file-clear" id="clearBtn1" onclick="clearFile(event)">✕</button>
         </div>
         <div class="loading-bar" id="loadBar1"></div>
-      </div>
-
-      <!-- Step 2 -->
-      <div class="import-card" id="card2">
-        <div class="card-step">
-          <div class="step-badge" id="badge2">2</div>
-          <div>
-            <div class="card-title">config.log</div>
-            <div class="card-cmd">show configuration interfaces | display set</div>
-          </div>
-        </div>
-        <div class="file-zone" id="zone2" ondragover="handleDragOver(event,'zone2')" ondragleave="handleDragLeave('zone2')" ondrop="handleDrop(event,2)">
-          <input type="file" accept=".log,.txt" onchange="handleFile(event,2)">
-          <div class="file-icon" id="fileIcon2">📄</div>
-          <div class="file-hint" id="fileHint2">Drop config.log here<br>or click to browse</div>
-          <div class="file-name" id="fileName2"></div>
-          <button class="file-clear" id="clearBtn2" onclick="clearFile(event,2)">✕</button>
-        </div>
-        <div class="loading-bar" id="loadBar2"></div>
       </div>
     </div>
 
     <!-- Run Button -->
     <div class="sidebar-section">
-      <div class="section-label">Step 3 — Analyze</div>
+      <div class="section-label">Step 2 — Analyze</div>
       <button class="run-btn" id="runBtn" onclick="runAnalysis()" disabled>
         <span class="run-icon">▶</span>
         RUN ANALYSIS
@@ -843,8 +824,7 @@
 </div>
 
 <script>
-  let terseContent = null;
-  let configContent = null;
+  let fileContent = null;
   let allResults = [];
   let filteredResults = [];
   let currentFilter = 'all';
@@ -854,16 +834,16 @@
   // ──────────────────────────────────────────────
   // File handling
   // ──────────────────────────────────────────────
-  function handleFile(event, step) {
+  function handleFile(event) {
     const file = event.target.files[0];
-    if (file) loadFileStep(file, step);
+    if (file) loadFileStep(file);
   }
 
-  function handleDrop(event, step) {
+  function handleDrop(event) {
     event.preventDefault();
-    handleDragLeave('zone' + step);
+    handleDragLeave('zone1');
     const file = event.dataTransfer.files[0];
-    if (file) loadFileStep(file, step);
+    if (file) loadFileStep(file);
   }
 
   function handleDragOver(event, zoneId) {
@@ -875,48 +855,44 @@
     document.getElementById(zoneId).classList.remove('drag-over');
   }
 
-  function loadFileStep(file, step) {
-    const bar = document.getElementById('loadBar' + step);
+  function loadFileStep(file) {
+    const bar = document.getElementById('loadBar1');
     bar.classList.add('active');
     const reader = new FileReader();
     reader.onload = (e) => {
       bar.classList.remove('active');
-      if (step === 1) terseContent = e.target.result;
-      else configContent = e.target.result;
-      updateFileUI(step, file.name);
+      fileContent = e.target.result;
+      updateFileUI(file.name);
       checkReady();
     };
     reader.readAsText(file);
   }
 
-  function updateFileUI(step, name) {
-    document.getElementById('fileIcon' + step).textContent = '✅';
-    document.getElementById('fileHint' + step).style.display = 'none';
-    const fn = document.getElementById('fileName' + step);
+  function updateFileUI(name) {
+    document.getElementById('fileIcon1').textContent = '✅';
+    document.getElementById('fileHint1').style.display = 'none';
+    const fn = document.getElementById('fileName1');
     fn.textContent = name;
     fn.style.display = 'block';
-    const cb = document.getElementById('clearBtn' + step);
-    cb.style.display = 'flex';
-    document.getElementById('card' + step).classList.add('has-file');
-    if (step === 2) document.getElementById('badge2').classList.add('active');
+    document.getElementById('clearBtn1').style.display = 'flex';
+    document.getElementById('card1').classList.add('has-file');
   }
 
-  function clearFile(event, step) {
+  function clearFile(event) {
     event.preventDefault();
     event.stopPropagation();
-    if (step === 1) terseContent = null;
-    else configContent = null;
-    document.getElementById('fileIcon' + step).textContent = '📄';
-    document.getElementById('fileHint' + step).style.display = 'block';
-    document.getElementById('fileName' + step).style.display = 'none';
-    document.getElementById('clearBtn' + step).style.display = 'none';
-    document.getElementById('card' + step).classList.remove('has-file');
+    fileContent = null;
+    document.getElementById('fileIcon1').textContent = '📄';
+    document.getElementById('fileHint1').style.display = 'block';
+    document.getElementById('fileName1').style.display = 'none';
+    document.getElementById('clearBtn1').style.display = 'none';
+    document.getElementById('card1').classList.remove('has-file');
     checkReady();
   }
 
   function checkReady() {
     const btn = document.getElementById('runBtn');
-    btn.disabled = !(terseContent && configContent);
+    btn.disabled = !fileContent;
   }
 
   // ──────────────────────────────────────────────
@@ -1079,15 +1055,9 @@
       try {
         let terse, config;
 
-        // Use real files or sample
-        if (terseContent && configContent) {
-          terse = parseTerse(terseContent);
-          config = parseConfig(configContent);
-        } else {
-          // Use sample
-          terse = parseTerse(SAMPLE_TERSE);
-          config = parseConfig(SAMPLE_CONFIG);
-        }
+        const src = fileContent || SAMPLE_DATA;
+        terse = parseTerse(src);
+        config = parseConfig(src);
 
         setStatus('running', '⟳ Merging with config...');
 
@@ -1295,7 +1265,7 @@
   // ──────────────────────────────────────────────
   // Sample Data
   // ──────────────────────────────────────────────
-  const SAMPLE_TERSE = `
+  const SAMPLE_DATA = `
 ge-0/0/0                up    up
 ge-0/0/0.0              up    up       inet
 ge-0/0/1                up    down
@@ -1317,9 +1287,6 @@ et-2/0/0                up    up
 et-2/0/0.0              up    up       inet
 lo0                     up    up
 lo0.0                   up    up       inet
-`;
-
-  const SAMPLE_CONFIG = `
 set interfaces ge-0/0/0 unit 0 description "TrueMove H - JPCC-2024-001"
 set interfaces ge-0/0/0 unit 0 family inet address 10.10.1.1/30
 set interfaces ge-0/0/1 unit 0 description "AIS Data Center - JPCC-2024-002"
@@ -1343,10 +1310,8 @@ set interfaces lo0 unit 0 family inet address 203.150.0.1/32
 `;
 
   function loadSampleData() {
-    terseContent = SAMPLE_TERSE;
-    configContent = SAMPLE_CONFIG;
-    updateFileUI(1, 'sample_terse.log');
-    updateFileUI(2, 'sample_config.log');
+    fileContent = SAMPLE_DATA;
+    updateFileUI('sample_combined.log');
     checkReady();
     runAnalysis();
   }
